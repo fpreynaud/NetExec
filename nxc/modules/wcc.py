@@ -80,12 +80,12 @@ class ConfigCheck:
             return
 
         status = colored("OK", "green", attrs=["bold"]) if self.ok else colored("KO", "red", attrs=["bold"])
+        verbose_status = "OK" if self.ok else "KO"
         reasons = ": " + ", ".join(self.reasons)
         msg = f"{status} {self.name}"
-        info_msg = f"{status} {self.name}{reasons}"
+        verbose_msg = f"{verbose_status} {self.name}{reasons}"
         context.log.highlight(msg)
-        context.log.info(info_msg)
-
+        context.log.info(verbose_msg)
 
 class NXCModule:
     """
@@ -448,23 +448,55 @@ class HostChecker:
 
     def check_nbtns(self):
         key_name = "HKLM\\SYSTEM\\CurrentControlSet\\Services\\NetBT\\Parameters\\Interfaces"
-        subkeys = self.reg_get_subkeys(self.dce, self.connection, key_name)
+                
+
+        interface_keys = self.reg_get_subkeys(self.dce, self.connection, key_name)
+        interface_uuids = [ key.split('_')[1] for key in interface_keys ]
+
+        # Get mappings of interface UUID -> interface name
+        uuid_name_map = {}
+        network_key_name = "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Network"
+        network_keys = self.reg_get_subkeys(self.dce, self.connection, network_key_name)
+        for network_subkey in network_keys:
+            subkey_name = network_key_name + "\\" + network_subkey
+            network_interfaces_subkeys = self.reg_get_subkeys(self.dce, self.connection, subkey_name)
+            for interface_uuid in interface_uuids:
+                if interface_uuid.lower() in map(str.lower, network_interfaces_subkeys):
+                    name = self.reg_query_value(self.dce, self.connection, subkey_name + "\\" + interface_uuid + "\\Connection", "Name")
+                    instance_id = self.reg_query_value(self.dce, self.connection, subkey_name + "\\" + interface_uuid + "\\Connection", "PnPInstanceId")
+                    k = f'Tcpip_{interface_uuid}'
+
+                    if type(name) == DCERPCSessionError:
+                        name = k
+                    if type(instance_id) == DCERPCSessionError:
+                        instance_id = None
+
+                    uuid_name_map[k] = (name, instance_id)
+                        
         success = False
         reasons = []
         missing = 0
         nbtns_enabled = 0
-        for subkey in subkeys:
+        for subkey in interface_keys:
             value = self.reg_query_value(self.dce, self.connection, key_name + "\\" + subkey, "NetbiosOptions")
             if type(value) == DCERPCSessionError:
                 if value.error_code == ERROR_OBJECT_NOT_FOUND:
                     missing += 1
                 continue
             if value != 2:
+                name, instance_id = uuid_name_map[subkey]
+
+                # Ignore the Kernel Debugger interface.
+                if instance_id.lower().startswith('root\\kdnic'):
+                    continue
+
+                reasons.append(f"NBTNS enabled on interface {name}")
                 nbtns_enabled += 1
+
         if missing > 0:
             reasons.append(f"HKLM\\SYSTEM\\CurrentControlSet\\Services\\NetBT\\Parameters\\Interfaces\\<interface>\\NetbiosOptions: value not found on {missing} interfaces")
         if nbtns_enabled > 0:
-            reasons.append(f"NBTNS enabled on {nbtns_enabled} interfaces out of {len(subkeys)}")
+            reasons.append(f"NBTNS enabled on {nbtns_enabled} interfaces out of {len(interface_keys) - 1}")
         if missing == 0 and nbtns_enabled == 0:
             success = True
             reasons.append("NBTNS disabled on all interfaces")
