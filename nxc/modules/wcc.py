@@ -194,7 +194,7 @@ class HostChecker:
             ConfigCheck("RDP authentication", "Checks RDP authentication configuration (NLA auth and restricted admin mode)", checker_args=[[self, ("HKLM\\System\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp\\", "UserAuthentication", 1), ("HKLM\\SYSTEM\\CurrentControlSet\\Control\\LSA", "DisableRestrictedAdmin", 0)]]),
             ConfigCheck("BitLocker configuration", "Checks the BitLocker configuration (based on https://www.stigviewer.com/stig/windows_10/2020-06-15/finding/V-94859)", checker_args=[[self, ("HKLM\\SOFTWARE\\Policies\\Microsoft\\FVE", "UseAdvancedStartup", 1), ("HKLM\\SOFTWARE\\Policies\\Microsoft\\FVE", "UseTPMPIN", 1)]]),
             ConfigCheck("Guest account disabled", "Checks if the guest account is disabled", checkers=[self.check_guest_account_disabled]),
-            ConfigCheck("Automatic session lock enabled", "Checks if the session is automatically locked on after a period of inactivity", checker_args=[[self, ("HKCU\\Control Panel\\Desktop", "ScreenSaverIsSecure", 1), ("HKCU\\Control Panel\\Desktop", "ScreenSaveTimeOut", 300, le)]]),
+            ConfigCheck("Automatic session lock enabled", "Checks if the session is automatically locked on after a period of inactivity", checker_args=[[self, ("HKCU\\SOFTWARE\\policies\\microsoft\\windows\\control panel\\desktop", "ScreenSaveActive", "1\x00"), ("HKCU\\SOFTWARE\\Policies\\Microsoft\\Windows\\Control Panel\\Desktop", "ScreenSaverIsSecure", "1\x00"), ("HKCU\\SOFTWARE\\Policies\\Microsoft\\Windows\\Control Panel\\Desktop", "ScreenSaveTimeOut", 0, gt), ("HKCU\\SOFTWARE\\Policies\\Microsoft\\Windows\\Control Panel\\Desktop", "ScreenSaveTimeOut", 300, le)]]),
             ConfigCheck('Powershell Execution Policy == "Restricted"', 'Checks if the Powershell execution policy is set to "Restricted"', checker_args=[[self, ("HKLM\\SOFTWARE\\Microsoft\\PowerShell\\1\ShellIds\Microsoft.Powershell", "ExecutionPolicy", "Restricted\x00"), ("HKCU\\SOFTWARE\\Microsoft\\PowerShell\\1\ShellIds\Microsoft.Powershell", "ExecutionPolicy", "Restricted\x00")]], checker_kwargs=[{"options": {"KOIfMissing": False, "lastWins": True}}])
         ]
 
@@ -299,7 +299,7 @@ class HostChecker:
                 nopstring = "{left} == {right}"
             else:
                 opstring = f"{op.__name__}({{left}}, {{right}}) == True"
-                nopstring = f"{op.__name__}({{left}}, {{right}}) == True"
+                nopstring = f"{op.__name__}({{left}}, {{right}}) == False"
 
             value = self.reg_query_value(self.dce, self.connection, key, value_name)
 
@@ -686,13 +686,14 @@ class HostChecker:
 def le(reg_sz_string, number):
     return int(reg_sz_string[:-1]) <= number
 
+def gt(reg_sz_string, number):
+    return int(reg_sz_string[:-1]) > number
 
 def in_(obj, seq):
     return obj in seq
 
 def startswith(string, start):
     return string.startswith(start)
-
 
 def not_(boolean_operator):
     def wrapper(*args, **kwargs):
