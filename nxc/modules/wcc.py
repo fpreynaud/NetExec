@@ -182,7 +182,7 @@ class HostChecker:
             ConfigCheck("LM hash storage disabled", "Checks if storing  hashes in LM format is disabled", checker_args=[[self, ("HKLM\\System\\CurrentControlSet\\Control\\Lsa", "NoLMHash", 1)]]),
             ConfigCheck("Last successful update age", "Checks how old is the last successful update", checkers=[self.check_last_successful_update]),
             ConfigCheck("LLMNR disabled", "Checks if LLMNR is disabled", checker_args=[[self, ("HKLM\\Software\\Policies\\Microsoft\\Windows NT\\DNSClient", "EnableMulticast", 0)]]),
-            ConfigCheck("LmCompatibilityLevel == 5", "Checks if LmCompatibilityLevel is set to 5", checker_args=[[self, ("HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa", "LmCompatibilityLevel", 5, operator.ge)]]),
+            ConfigCheck("LmCompatibilityLevel >= 4", "Checks that only NTLMv2 responses are sent and that LM authentication is refused.", checker_args=[[self, ("HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa", "LmCompatibilityLevel", 4, operator.ge), ("HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", "CurrentBuildNumber", 7599, gt)]], checker_kwargs=[{"options":{"KOIfMissing":False, "stopOnOK":True}}]),
             ConfigCheck("Lsass run as PPL", "Checks if lsass runs as a protected process", checker_args=[[self, ("HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa", "RunAsPPL", 1)]]),
             ConfigCheck("mDNS disabled", "Checks if mDNS is disabled", checker_args=[[self, ("HKLM\\SYSTEM\\CurrentControlSet\\Services\\DNScache\\Parameters", "EnableMDNS", 0)]]),
             ConfigCheck("NBTNS disabled", "Checks if NBTNS is disabled on all interfaces", checkers=[self.check_nbtns]),
