@@ -178,7 +178,7 @@ class HostChecker:
             ConfigCheck("IPv4 preferred over IPv6", "Checks if IPv4 is preferred over IPv6", checker_args=[[self, ("HKLM\\SYSTEM\\CurrentControlSet\\Services\\Tcpip6\\Parameters", "DisabledComponents", 32, operator.and_)]]),
             ConfigCheck("LAPS installed", "Checks if LAPS is installed", checkers=[self.check_laps]),
             ConfigCheck("LDAP channel binding enabled", "Checks if LDAP channel binding is enabled", checker_args=[[self, ("HKLM\\SYSTEM\\CurrentControlSet\\Services\\NTDS\\Parameters", "LdapEnforceChannelBinding", 2)]]),
-            ConfigCheck("LDAP signing enabled", "Checks if LDAP signing is enabled", checker_args=[[self, ("HKLM\\SYSTEM\\CurrentControlSet\\Services\\NTDS\\Parameters", "LDAPServerIntegrity", 2)]]),
+            ConfigCheck("LDAP signing enabled", "Checks if LDAP signing is enabled (always OK on non DC)", checker_args=[[self, ("HKLM\\SYSTEM\\CurrentControlSet\\Services\\NTDS\\Parameters", "DSA Database file", None), ("HKLM\\SYSTEM\\CurrentControlSet\\Services\\NTDS\\Parameters", "LDAPServerIntegrity", 2)]], checker_kwargs=[{"options":{"lastWins":True, "stopOnOK":True}}]),
             ConfigCheck("LM hash storage disabled", "Checks if storing  hashes in LM format is disabled", checker_args=[[self, ("HKLM\\System\\CurrentControlSet\\Control\\Lsa", "NoLMHash", 1)]]),
             ConfigCheck("Last successful update age", "Checks how old is the last successful update", checkers=[self.check_last_successful_update]),
             ConfigCheck("LLMNR disabled", "Checks if LLMNR is disabled", checker_args=[[self, ("HKLM\\Software\\Policies\\Microsoft\\Windows NT\\DNSClient", "EnableMulticast", 0)]]),
@@ -267,6 +267,7 @@ class HostChecker:
             try:
                 if len(spec) == 3:
                     (key, value_name, expected_value) = spec
+                    op = operator.eq
                 elif len(spec) == 4:
                     (key, value_name, expected_value, op) = spec
                 else:
@@ -314,9 +315,15 @@ class HostChecker:
                 else:
                     ok = False
                     reasons.append(f"Error while retrieving value of {key}\\{value_name}: {value}")
-                continue
 
-            if op(value, expected_value):
+                value = None
+
+            try:
+                comparison_result = op(value, expected_value)
+            except TypeError:
+                comparison_result = False
+
+            if comparison_result:
                 if options["lastWins"]:
                     ok = True
                 reasons.append(opstring.format(left=f"{key}\\{value_name} ({value})", right=expected_value))
