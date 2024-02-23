@@ -191,7 +191,7 @@ class HostChecker:
             ConfigCheck("RDP expiration time", "Checks RDP session timeout", checker_args=[[self, ("HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services", "MaxDisconnectionTime", 0, operator.gt), ("HKCU\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services", "MaxDisconnectionTime", 0, operator.gt)]], checker_kwargs=[{"options": {"lastWins": True, "stopOnOK": True}}]),
             ConfigCheck("SMB encryption enabled", "Checks if SMB encryption is enabled globally (system-wide)", checker_args=[[self, ("HKLM\\SYSTEM\\CurrentControlSet\\Services\\LanmanServer\\Parameters", "EncryptData", 1)]]),
             ConfigCheck("SMB signing required", "Checks if SMB signing is required", checker_args=[[self, ("HKLM\\System\\CurrentControlSet\\Services\\LanmanServer\\Parameters", "RequireSecuritySignature", 1), ("HKLM\\System\\CurrentControlSet\\Services\\LanmanWorkstation\\Parameters", "RequireSecuritySignature", 1)]]),
-            ConfigCheck("Small LSA cache", "Checks how many logons are kept in the LSA cache", checker_args=[[self, ("HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon", "CachedLogonsCount", 2, le)]]),
+            ConfigCheck("Small LSA cache", "Checks how many logons are kept in the LSA cache", checkers=[self.check_lsa_cache]),
             ConfigCheck("Spooler service disabled", "Checks if the spooler service is disabled", checkers=[self.check_spooler_service]),
             ConfigCheck("UAC configuration", "Checks if UAC configuration is secure", checker_args=[[self, ("HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System", "EnableLUA", 1), ("HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System", "LocalAccountTokenFilterPolicy", 0)]], checker_kwargs=[{"options": {"KOIfMissing": False}}]),
             ConfigCheck("WDigest authentication disabled", "Checks if WDigest authentication is disabled", checker_args=[[self, ("HKLM\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\WDigest", "UseLogonCredential", 0)]]),
@@ -414,6 +414,31 @@ class HostChecker:
             return True, [f"Last update was {days_since_last_update} <= {OUTDATED_THRESHOLD} days ago"]
         else:
             return False, [f"Last update was {days_since_last_update} > {OUTDATED_THRESHOLD} days ago"]
+
+    def check_lsa_cache(self):
+        reasons = []
+
+        no_cache, r = self.check_registry(("HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon", "CachedLogonsCount", 0))
+        reasons += r
+
+        # If cache is disabled, OK
+        if no_cache:
+            return True, reasons
+
+        # If cache is enabled, and the machine is a server, KO
+        is_server, r = self.check_registry(("HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", "InstallationType", "Server\x00"))
+        reasons += r
+        if is_server:
+            return False, reasons
+
+        # If the machine is not a server and the cache size is <= 2, OK
+        small_cache, r = self.check_registry(("HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon", "CachedLogonsCount", 2, le))
+        reasons += r
+        if small_cache:
+            return True, reasons
+
+        # If cache > 2, KO
+        return False, reasons
 
     def check_administrator_name(self):
         user_info = self.get_user_info(self.connection, rid=500)
