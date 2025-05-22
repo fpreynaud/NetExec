@@ -29,6 +29,7 @@ REG_VALUE_TYPE_32BIT_BE = 5
 REG_VALUE_TYPE_UNICODE_STRING_SEQUENCE = 7
 REG_VALUE_TYPE_64BIT_LE = 11
 
+checks_results = {}
 
 class ConfigCheck:
     """Class for performing the checks and holding the results"""
@@ -115,28 +116,27 @@ class NXCModule:
             self.output_format = DEFAULT_OUTPUT_FORMAT
         self.quiet = module_options.get("QUIET", "false").lower() in ("true", "1")
 
-        self.results = {}
         ConfigCheck.module = self
         HostChecker.module = self
 
     def on_admin_login(self, context, connection):
-        self.results.setdefault(connection.host, {"checks": []})
         self.context = context
         HostChecker(context, connection).run()
         if self.output is not None:
             self.export_results()
 
     def add_result(self, host, result):
-        self.results[host]["checks"].append({"Check": result.name, "Description": result.description, "Status": "OK" if result.ok else "KO", "Reasons": result.reasons})
+        checks_results.setdefault(host, {"checks": []})
+        checks_results[host]["checks"].append({"Check": result.name, "Description": result.description, "Status": "OK" if result.ok else "KO", "Reasons": result.reasons})
 
     def export_results(self):
         with open(self.output, "w") as output:
             if self.output_format == "json":
-                json.dump(self.results, output)
+                json.dump(checks_results, output)
             elif self.output_format == "csv":
                 output.write("Host,Check,Description,Status,Reasons")
-                for host in self.results:
-                    for result in self.results[host]["checks"]:
+                for host in checks_results:
+                    for result in checks_results[host]["checks"]:
                         output.write(f"\n{host}")
                         for field in (result["Check"], result["Description"], result["Status"], " ; ".join(result["Reasons"]).replace("\x00", "")):
                             if "," in field:
